@@ -12,6 +12,13 @@ type Venta = {
   estado: 'Completado' | 'Pendiente' | 'Cancelado'
 }
 
+type NuevaVenta = {
+  producto: string
+  cliente: string
+  monto: number
+  metodo: string
+}
+
 const ventasIniciales: Venta[] = [
   { id: 1, fecha: '2026-11-25', producto: 'Laptop Pro 16"', cliente: 'Carlos Mendoza', monto: 2399, metodo: 'Tarjeta', estado: 'Completado' },
   { id: 2, fecha: '2026-11-25', producto: 'Monitor 27" 4K', cliente: 'Ana García', monto: 849, metodo: 'Transferencia', estado: 'Completado' },
@@ -23,16 +30,29 @@ const ventasIniciales: Venta[] = [
   { id: 8, fecha: '2026-11-22', producto: 'Audífonos Bluetooth', cliente: 'Diana Torres', monto: 199, metodo: 'Tarjeta', estado: 'Pendiente' },
 ]
 
+const productosDisponibles = [
+  'Laptop Pro 16"', 'Monitor 27" 4K', 'Teclado Mecánico RGB', 'Mouse Inalámbrico',
+  'Silla Ergonómica', 'Webcam HD 1080p', 'Hub USB-C 7 puertos', 'Audífonos Bluetooth',
+  'Tablet 10"', 'Impresora Láser', 'Cámara Web 4K', 'Disco SSD 1TB',
+]
+
+const metodosPago = ['Tarjeta', 'Efectivo', 'Transferencia']
+
 const badgeEstado = {
   Completado: 'bg-emerald-100 text-emerald-700',
   Pendiente: 'bg-amber-100 text-amber-700',
   Cancelado: 'bg-red-100 text-red-700',
 }
 
+const ventaVacia: NuevaVenta = { producto: '', cliente: '', monto: 0, metodo: '' }
+
 export default function VentasPage() {
   const [ventas, setVentas] = useState(ventasIniciales)
   const [filtro, setFiltro] = useState('Todas')
   const [busqueda, setBusqueda] = useState('')
+  const [modalAbierto, setModalAbierto] = useState(false)
+  const [nuevaVenta, setNuevaVenta] = useState<NuevaVenta>(ventaVacia)
+  const [errorForm, setErrorForm] = useState('')
 
   function toggleEstado(id: number) {
     setVentas((prev) =>
@@ -45,14 +65,40 @@ export default function VentasPage() {
     )
   }
 
+  function abrirModal() {
+    setNuevaVenta(ventaVacia)
+    setErrorForm('')
+    setModalAbierto(true)
+  }
+
+  function cerrarModal() {
+    setModalAbierto(false)
+    setErrorForm('')
+  }
+
+  function realizarVenta() {
+    if (!nuevaVenta.producto || !nuevaVenta.cliente || nuevaVenta.monto <= 0 || !nuevaVenta.metodo) {
+      setErrorForm('Completa todos los campos para realizar la venta.')
+      return
+    }
+    setErrorForm('')
+
+    const hoy = new Date()
+    const fecha = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+    const nuevoId = Math.max(...ventas.map((v) => v.id), 0) + 1
+
+    setVentas((prev) => [
+      ...prev,
+      { id: nuevoId, fecha, ...nuevaVenta, estado: 'Completado' },
+    ])
+    cerrarModal()
+  }
+
   const filtradas = ventas.filter((v) => {
     if (filtro !== 'Todas' && v.estado !== filtro) return false
     if (busqueda) {
       const q = busqueda.toLowerCase()
-      return (
-        v.producto.toLowerCase().includes(q) ||
-        v.cliente.toLowerCase().includes(q)
-      )
+      return v.producto.toLowerCase().includes(q) || v.cliente.toLowerCase().includes(q)
     }
     return true
   })
@@ -74,19 +120,14 @@ export default function VentasPage() {
           <div className="relative">
             <svg
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
             </svg>
             <input
-              type="text"
-              placeholder="Buscar…"
-              value={busqueda}
+              type="text" placeholder="Buscar…" value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              className="w-48 rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-3.5 text-sm text-slate-900 placeholder-slate-400 transition-colors focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              className="w-44 rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-3.5 text-sm text-slate-900 placeholder-slate-400 transition-colors focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
             />
           </div>
 
@@ -100,6 +141,16 @@ export default function VentasPage() {
             <option value="Pendiente">Pendiente</option>
             <option value="Cancelado">Cancelado</option>
           </select>
+
+          <button
+            onClick={abrirModal}
+            className="flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-700 active:scale-[0.98]"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Nueva venta
+          </button>
         </div>
       </div>
 
@@ -163,6 +214,95 @@ export default function VentasPage() {
           )
         })}
       </div>
+
+      {modalAbierto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">Nueva venta</h2>
+              <button onClick={cerrarModal} className="text-slate-400 hover:text-slate-600">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {errorForm && (
+              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
+                <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                </svg>
+                <span>{errorForm}</span>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Producto</label>
+                <select
+                  value={nuevaVenta.producto}
+                  onChange={(e) => setNuevaVenta({ ...nuevaVenta, producto: e.target.value })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 transition-colors focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                >
+                  <option value="">Seleccionar producto…</option>
+                  {productosDisponibles.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Cliente</label>
+                <input
+                  type="text" placeholder="Nombre del cliente" value={nuevaVenta.cliente}
+                  onChange={(e) => setNuevaVenta({ ...nuevaVenta, cliente: e.target.value })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 transition-colors focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Monto ($)</label>
+                <input
+                  type="number" min={0.01} step={0.01} placeholder="0.00" value={nuevaVenta.monto || ''}
+                  onChange={(e) => setNuevaVenta({ ...nuevaVenta, monto: Number(e.target.value) })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 transition-colors focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Método de pago</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {metodosPago.map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setNuevaVenta({ ...nuevaVenta, metodo: m })}
+                      className={`rounded-lg border px-3 py-2 text-sm font-medium transition-all ${
+                        nuevaVenta.metodo === m
+                          ? 'border-slate-800 bg-slate-800 text-white'
+                          : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={cerrarModal}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={realizarVenta}
+                className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-700 active:scale-[0.98]"
+              >
+                Realizar venta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
