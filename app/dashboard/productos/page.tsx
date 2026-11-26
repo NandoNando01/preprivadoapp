@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 type Producto = {
   id: number
@@ -13,28 +13,25 @@ type Producto = {
 
 type ProductoForm = Omit<Producto, 'id' | 'estado'>
 
-const initialProductos: Producto[] = [
-  { id: 1, nombre: 'Laptop Pro 16"', categoria: 'Computadoras', precio: 2399, stock: 45, estado: 'Activo' },
-  { id: 2, nombre: 'Monitor 27" 4K', categoria: 'Monitores', precio: 849, stock: 120, estado: 'Activo' },
-  { id: 3, nombre: 'Teclado Mecánico RGB', categoria: 'Periféricos', precio: 159, stock: 200, estado: 'Activo' },
-  { id: 4, nombre: 'Mouse Inalámbrico', categoria: 'Periféricos', precio: 89, stock: 350, estado: 'Activo' },
-  { id: 5, nombre: 'Silla Ergonómica', categoria: 'Muebles', precio: 1299, stock: 18, estado: 'Activo' },
-  { id: 6, nombre: 'Webcam HD 1080p', categoria: 'Accesorios', precio: 129, stock: 0, estado: 'Inactivo' },
-  { id: 7, nombre: 'Hub USB-C 7 puertos', categoria: 'Accesorios', precio: 59, stock: 85, estado: 'Activo' },
-  { id: 8, nombre: 'Audífonos Bluetooth', categoria: 'Audio', precio: 199, stock: 64, estado: 'Activo' },
-]
+const API = 'http://localhost:3001'
 
 const categorias = ['Computadoras', 'Monitores', 'Periféricos', 'Muebles', 'Accesorios', 'Audio']
 
 const formVacio: ProductoForm = { nombre: '', categoria: '', precio: 0, stock: 0 }
 
 export default function ProductosPage() {
-  const [productos, setProductos] = useState(initialProductos)
+  const [productos, setProductos] = useState<Producto[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [modal, setModal] = useState<{ abierto: boolean; editando: Producto | null }>({ abierto: false, editando: null })
   const [form, setForm] = useState<ProductoForm>(formVacio)
 
-  function abrirNuevo() {
+  useEffect(() => {
+    fetch(`${API}/productos`)
+      .then((r) => r.json())
+      .then(setProductos)
+  }, [])
+
+  async function abrirNuevo() {
     setForm(formVacio)
     setModal({ abierto: true, editando: null })
   }
@@ -48,29 +45,46 @@ export default function ProductosPage() {
     setModal({ abierto: false, editando: null })
   }
 
-  function guardar() {
+  async function guardar() {
     if (!form.nombre || !form.categoria || form.precio <= 0 || form.stock < 0) return
 
-    setProductos((prev) => {
-      if (modal.editando) {
-        return prev.map((p) =>
-          p.id === modal.editando!.id
-            ? { ...p, nombre: form.nombre, categoria: form.categoria, precio: form.precio, stock: form.stock }
-            : p,
-        )
+    if (modal.editando) {
+      const res = await fetch(`${API}/productos/${modal.editando.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      if (res.ok) {
+        const actualizado = await res.json()
+        setProductos((prev) => prev.map((p) => (p.id === actualizado.id ? actualizado : p)))
       }
-      const nuevoId = Math.max(...prev.map((p) => p.id), 0) + 1
-      return [...prev, { id: nuevoId, ...form, estado: 'Activo' }]
-    })
+    } else {
+      const res = await fetch(`${API}/productos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, estado: 'Activo' }),
+      })
+      if (res.ok) {
+        const creado = await res.json()
+        setProductos((prev) => [...prev, creado])
+      }
+    }
     cerrarModal()
   }
 
-  function toggleEstado(id: number) {
-    setProductos((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, estado: p.estado === 'Activo' ? 'Inactivo' : 'Activo' } : p,
-      ),
-    )
+  async function toggleEstado(id: number) {
+    const p = productos.find((x) => x.id === id)
+    if (!p) return
+    const nuevoEstado = p.estado === 'Activo' ? 'Inactivo' : 'Activo'
+    const res = await fetch(`${API}/productos/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado: nuevoEstado }),
+    })
+    if (res.ok) {
+      const actualizado = await res.json()
+      setProductos((prev) => prev.map((x) => (x.id === id ? actualizado : x)))
+    }
   }
 
   const filtrados = productos.filter(

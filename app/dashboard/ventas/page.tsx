@@ -1,40 +1,36 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 type Venta = {
   id: number
+  productoId: number
+  producto: { id: number; nombre: string }
   fecha: string
-  producto: string
   cliente: string
   monto: number
   metodo: string
   estado: 'Completado' | 'Pendiente' | 'Cancelado'
+  createdAt: string
+}
+
+type Producto = {
+  id: number
+  nombre: string
+  categoria: string
+  precio: number
+  stock: number
+  estado: string
 }
 
 type NuevaVenta = {
-  producto: string
+  productoId: number
   cliente: string
   monto: number
   metodo: string
 }
 
-const ventasIniciales: Venta[] = [
-  { id: 1, fecha: '2026-11-25', producto: 'Laptop Pro 16"', cliente: 'Carlos Mendoza', monto: 2399, metodo: 'Tarjeta', estado: 'Completado' },
-  { id: 2, fecha: '2026-11-25', producto: 'Monitor 27" 4K', cliente: 'Ana García', monto: 849, metodo: 'Transferencia', estado: 'Completado' },
-  { id: 3, fecha: '2026-11-24', producto: 'Teclado Mecánico RGB', cliente: 'Luis Torres', monto: 159, metodo: 'Tarjeta', estado: 'Pendiente' },
-  { id: 4, fecha: '2026-11-24', producto: 'Mouse Inalámbrico', cliente: 'Sofía Rivera', monto: 89, metodo: 'Efectivo', estado: 'Completado' },
-  { id: 5, fecha: '2026-11-23', producto: 'Silla Ergonómica', cliente: 'Pedro Sánchez', monto: 1299, metodo: 'Transferencia', estado: 'Cancelado' },
-  { id: 6, fecha: '2026-11-23', producto: 'Webcam HD 1080p', cliente: 'María López', monto: 129, metodo: 'Tarjeta', estado: 'Completado' },
-  { id: 7, fecha: '2026-11-22', producto: 'Hub USB-C 7 puertos', cliente: 'Jorge Ruiz', monto: 59, metodo: 'Efectivo', estado: 'Completado' },
-  { id: 8, fecha: '2026-11-22', producto: 'Audífonos Bluetooth', cliente: 'Diana Torres', monto: 199, metodo: 'Tarjeta', estado: 'Pendiente' },
-]
-
-const productosDisponibles = [
-  'Laptop Pro 16"', 'Monitor 27" 4K', 'Teclado Mecánico RGB', 'Mouse Inalámbrico',
-  'Silla Ergonómica', 'Webcam HD 1080p', 'Hub USB-C 7 puertos', 'Audífonos Bluetooth',
-  'Tablet 10"', 'Impresora Láser', 'Cámara Web 4K', 'Disco SSD 1TB',
-]
+const API = 'http://localhost:3001'
 
 const metodosPago = ['Tarjeta', 'Efectivo', 'Transferencia']
 
@@ -44,25 +40,41 @@ const badgeEstado = {
   Cancelado: 'bg-red-100 text-red-700',
 }
 
-const ventaVacia: NuevaVenta = { producto: '', cliente: '', monto: 0, metodo: '' }
+const ventaVacia: NuevaVenta = { productoId: 0, cliente: '', monto: 0, metodo: '' }
 
 export default function VentasPage() {
-  const [ventas, setVentas] = useState(ventasIniciales)
+  const [ventas, setVentas] = useState<Venta[]>([])
+  const [productos, setProductos] = useState<Producto[]>([])
   const [filtro, setFiltro] = useState('Todas')
   const [busqueda, setBusqueda] = useState('')
   const [modalAbierto, setModalAbierto] = useState(false)
   const [nuevaVenta, setNuevaVenta] = useState<NuevaVenta>(ventaVacia)
   const [errorForm, setErrorForm] = useState('')
 
-  function toggleEstado(id: number) {
-    setVentas((prev) =>
-      prev.map((v) => {
-        if (v.id !== id) return v
-        const ciclo: Venta['estado'][] = ['Completado', 'Pendiente', 'Cancelado']
-        const idx = ciclo.indexOf(v.estado)
-        return { ...v, estado: ciclo[(idx + 1) % ciclo.length] }
-      }),
-    )
+  useEffect(() => {
+    fetch(`${API}/ventas`)
+      .then((r) => r.json())
+      .then(setVentas)
+    fetch(`${API}/productos`)
+      .then((r) => r.json())
+      .then(setProductos)
+  }, [])
+
+  async function toggleEstado(id: number) {
+    const v = ventas.find((x) => x.id === id)
+    if (!v) return
+    const ciclo: Venta['estado'][] = ['Completado', 'Pendiente', 'Cancelado']
+    const idx = ciclo.indexOf(v.estado)
+    const nuevoEstado = ciclo[(idx + 1) % ciclo.length]
+    const res = await fetch(`${API}/ventas/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado: nuevoEstado }),
+    })
+    if (res.ok) {
+      const actualizada = await res.json()
+      setVentas((prev) => prev.map((x) => (x.id === id ? actualizada : x)))
+    }
   }
 
   function abrirModal() {
@@ -76,34 +88,39 @@ export default function VentasPage() {
     setErrorForm('')
   }
 
-  function realizarVenta() {
-    if (!nuevaVenta.producto || !nuevaVenta.cliente || nuevaVenta.monto <= 0 || !nuevaVenta.metodo) {
+  async function realizarVenta() {
+    if (!nuevaVenta.productoId || !nuevaVenta.cliente || nuevaVenta.monto <= 0 || !nuevaVenta.metodo) {
       setErrorForm('Completa todos los campos para realizar la venta.')
       return
     }
     setErrorForm('')
 
-    const hoy = new Date()
-    const fecha = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
-    const nuevoId = Math.max(...ventas.map((v) => v.id), 0) + 1
-
-    setVentas((prev) => [
-      ...prev,
-      { id: nuevoId, fecha, ...nuevaVenta, estado: 'Completado' },
-    ])
-    cerrarModal()
+    const res = await fetch(`${API}/ventas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...nuevaVenta, estado: 'Completado' }),
+    })
+    if (res.ok) {
+      const creada = await res.json()
+      setVentas((prev) => [...prev, creada])
+      cerrarModal()
+    } else {
+      const err = await res.json()
+      setErrorForm(err.message ?? 'Error al crear la venta')
+    }
   }
 
   const filtradas = ventas.filter((v) => {
     if (filtro !== 'Todas' && v.estado !== filtro) return false
     if (busqueda) {
       const q = busqueda.toLowerCase()
-      return v.producto.toLowerCase().includes(q) || v.cliente.toLowerCase().includes(q)
+      const nombreProducto = v.producto?.nombre?.toLowerCase() ?? ''
+      return nombreProducto.includes(q) || v.cliente.toLowerCase().includes(q)
     }
     return true
   })
 
-  const totalMonto = filtradas.reduce((sum, v) => sum + v.monto, 0)
+  const totalMonto = filtradas.reduce((sum, v) => sum + Number(v.monto), 0)
 
   return (
     <div>
@@ -170,10 +187,12 @@ export default function VentasPage() {
           <tbody>
             {filtradas.map((v) => (
               <tr key={v.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                <td className="px-5 py-3.5 text-slate-500">{v.fecha}</td>
-                <td className="px-5 py-3.5 font-medium text-slate-900">{v.producto}</td>
+                <td className="px-5 py-3.5 text-slate-500">
+                  {v.createdAt ? new Date(v.createdAt).toLocaleDateString() : v.fecha}
+                </td>
+                <td className="px-5 py-3.5 font-medium text-slate-900">{v.producto?.nombre ?? '—'}</td>
                 <td className="px-5 py-3.5 text-slate-600">{v.cliente}</td>
-                <td className="px-5 py-3.5 font-medium text-slate-900">${v.monto.toLocaleString()}</td>
+                <td className="px-5 py-3.5 font-medium text-slate-900">${Number(v.monto).toLocaleString()}</td>
                 <td className="px-5 py-3.5 text-slate-500">{v.metodo}</td>
                 <td className="px-5 py-3.5">
                   <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${badgeEstado[v.estado]}`}>
@@ -204,7 +223,7 @@ export default function VentasPage() {
       <div className="mt-6 grid grid-cols-3 gap-4">
         {(['Completado', 'Pendiente', 'Cancelado'] as const).map((estado) => {
           const count = ventas.filter((v) => v.estado === estado).length
-          const total = ventas.filter((v) => v.estado === estado).reduce((s, v) => s + v.monto, 0)
+          const total = ventas.filter((v) => v.estado === estado).reduce((s, v) => s + Number(v.monto), 0)
           return (
             <div key={estado} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-xs font-medium uppercase tracking-wider text-slate-400">{estado}</p>
@@ -240,13 +259,15 @@ export default function VentasPage() {
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-600">Producto</label>
                 <select
-                  value={nuevaVenta.producto}
-                  onChange={(e) => setNuevaVenta({ ...nuevaVenta, producto: e.target.value })}
+                  value={nuevaVenta.productoId}
+                  onChange={(e) => setNuevaVenta({ ...nuevaVenta, productoId: Number(e.target.value) })}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 transition-colors focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200"
                 >
-                  <option value="">Seleccionar producto…</option>
-                  {productosDisponibles.map((p) => (
-                    <option key={p} value={p}>{p}</option>
+                  <option value={0}>Seleccionar producto…</option>
+                  {productos.filter((p) => p.estado === 'Activo' && p.stock > 0).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre} (${p.precio} — Stock: {p.stock})
+                    </option>
                   ))}
                 </select>
               </div>
